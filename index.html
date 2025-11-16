@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>شات بوت السنهوري - AI Legal Assistant</title>
+    <!-- ResponsiveVoice CDN for TTS fallback -->
+    <script
+src="https://code.responsivevoice.org/responsivevoice.js?key=L3k0PDBj"></script>
     
     <!-- Open Graph Meta Tags for Facebook -->
     <meta property="og:title" content="شات بوت السنهوري - AI Legal Assistant">
@@ -287,6 +290,79 @@
             font-size: 16px;
         }
 
+        .voice-btn {
+            background: rgba(212, 175, 55, 0.2);
+            border: 2px solid #d4af37;
+            color: #d4af37;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+
+        .voice-btn:hover:not(:disabled) {
+            background: #d4af37;
+            color: #16213e;
+            transform: scale(1.1);
+        }
+
+        .voice-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .voice-btn.listening {
+            background: #d4af37;
+            color: #16213e;
+            animation: pulse 1.5s infinite;
+        }
+
+        .voice-btn.speaking {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(212, 175, 55, 0);
+            }
+        }
+
+        .speaker-btn {
+            background: transparent;
+            border: none;
+            color: #0f3460;
+            cursor: pointer;
+            padding: 4px;
+            margin-left: 8px;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .speaker-btn:hover {
+            color: #d4af37;
+            transform: scale(1.1);
+        }
+
+        .speaker-btn.speaking {
+            color: #4CAF50;
+            animation: pulse 1.5s infinite;
+        }
+
         @media (max-width: 768px) {
             .chat-header h1 {
                 font-size: 18px;
@@ -339,6 +415,14 @@
 
         <div class="chat-input-container">
             <div class="chat-input-wrapper">
+                <button id="voiceBtn" class="voice-btn" onclick="toggleVoiceInput()" title="Voice Input">
+                    <svg id="micIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
                 <input 
                     type="text" 
                     id="messageInput" 
@@ -361,6 +445,240 @@
         let isLoading = false;
         let client = null;
         let conversationHistory = [];
+        let recognition = null;
+        let isListening = false;
+        let speechSynthesis = window.speechSynthesis;
+        let currentUtterance = null;
+        let isSpeaking = false;
+
+        // Initialize Speech Recognition
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'ar-SA'; // Arabic
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('messageInput').value = transcript;
+                    stopListening();
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    stopListening();
+                    if (event.error === 'no-speech') {
+                        addMessage('لم يتم اكتشاف أي كلام. يرجى المحاولة مرة أخرى.', 'error');
+                    } else if (event.error === 'not-allowed') {
+                        addMessage('يرجى السماح بالوصول إلى الميكروفون.', 'error');
+                    }
+                };
+
+                recognition.onend = () => {
+                    stopListening();
+                };
+            }
+        }
+
+        function toggleVoiceInput() {
+            if (!recognition) {
+                addMessage('التعرف على الصوت غير مدعوم في متصفحك.', 'error');
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            try {
+                recognition.start();
+                isListening = true;
+                const voiceBtn = document.getElementById('voiceBtn');
+                voiceBtn.classList.add('listening');
+                voiceBtn.disabled = false;
+            } catch (error) {
+                console.error('Error starting recognition:', error);
+            }
+        }
+
+        function stopListening() {
+            if (recognition && isListening) {
+                recognition.stop();
+            }
+            isListening = false;
+            const voiceBtn = document.getElementById('voiceBtn');
+            voiceBtn.classList.remove('listening');
+        }
+
+        // Text-to-Speech Functions using ElevenLabs-style API
+        // Text-to-Speech Functions with improved fallback
+        async function speakText(text, messageElement) {
+            // Convert text to string if it's not already
+            const textToSpeak = String(text || '');
+
+            // Stop any current speech
+            if (isSpeaking) {
+                stopSpeaking();
+                return;
+            }
+
+            if (!textToSpeak.trim()) {
+                console.error('No text to speak');
+                return;
+            }
+
+            // Try multiple TTS methods in order of preference
+            try {
+                isSpeaking = true;
+                updateSpeakerIcon(messageElement, true);
+
+                // Method 1: Try ResponsiveVoice API (free tier available)
+                if (typeof responsiveVoice !== 'undefined') {
+                    responsiveVoice.speak(textToSpeak, "Arabic Female", {
+                        onend: () => {
+                            isSpeaking = false;
+                            updateSpeakerIcon(messageElement, false);
+                        },
+                        onerror: () => {
+                            fallbackToWebSpeech(textToSpeak, messageElement);
+                        }
+                    });
+                    return;
+                }
+
+                // Method 2: Try VoiceRSS (requires splitting text into chunks)
+                const chunks = splitTextIntoChunks(textToSpeak, 100);
+                await playChunksSequentially(chunks, messageElement);
+                
+            } catch (error) {
+                console.error('Error with TTS:', error);
+                // Final fallback to browser TTS
+                fallbackToWebSpeech(textToSpeak, messageElement);
+            }
+        }
+
+        // Split text into smaller chunks for better TTS processing
+        function splitTextIntoChunks(text, maxLength = 100) {
+            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+            const chunks = [];
+            let currentChunk = '';
+
+            for (const sentence of sentences) {
+                if ((currentChunk + sentence).length <= maxLength) {
+                    currentChunk += sentence;
+                } else {
+                    if (currentChunk) chunks.push(currentChunk.trim());
+                    currentChunk = sentence;
+                }
+            }
+            if (currentChunk) chunks.push(currentChunk.trim());
+            
+            return chunks;
+        }
+
+        // Play audio chunks sequentially
+        async function playChunksSequentially(chunks, messageElement) {
+            for (let i = 0; i < chunks.length; i++) {
+                if (!isSpeaking) break; // Stop if user cancelled
+                
+                try {
+                    // Using VoiceRSS API (free tier)
+                    const apiKey = 'f8d53cf137ec4c22a1c8c5c4d5b8e6b1'; // Free API key for demo
+                    const url = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(chunks[i])}&c=MP3&f=44khz_16bit_stereo`;
+                    
+                    await new Promise((resolve, reject) => {
+                        const audio = new Audio(url);
+                        
+                        audio.onended = resolve;
+                        audio.onerror = reject;
+                        
+                        audio.play().catch(reject);
+                    });
+                } catch (error) {
+                    console.error(`Error playing chunk ${i}:`, error);
+                    // On any error, fall back to browser TTS
+                    fallbackToWebSpeech(chunks.slice(i).join(' '), messageElement);
+                    return;
+                }
+            }
+            
+            isSpeaking = false;
+            updateSpeakerIcon(messageElement, false);
+        }
+
+        // Fallback to Web Speech API
+        function fallbackToWebSpeech(text, messageElement) {
+            if (!speechSynthesis) {
+                console.error('Text-to-speech not supported');
+                return;
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            const voices = speechSynthesis.getVoices();
+            const arabicVoice = voices.find(voice => 
+                voice.lang === 'ar-SA' || voice.lang.startsWith('ar')
+            );
+
+            if (arabicVoice) {
+                utterance.voice = arabicVoice;
+            }
+            
+            utterance.lang = 'ar-SA';
+            utterance.rate = 0.85;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+
+            utterance.onstart = () => {
+                isSpeaking = true;
+                updateSpeakerIcon(messageElement, true);
+            };
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                updateSpeakerIcon(messageElement, false);
+            };
+
+            utterance.onerror = () => {
+                isSpeaking = false;
+                updateSpeakerIcon(messageElement, false);
+            };
+
+            speechSynthesis.speak(utterance);
+        }
+
+        function updateSpeakerIcon(messageElement, speaking) {
+            const speakerBtn = messageElement.querySelector('.speaker-btn');
+            if (speakerBtn) {
+                if (speaking) {
+                    speakerBtn.classList.add('speaking');
+                } else {
+                    speakerBtn.classList.remove('speaking');
+                }
+            }
+        }
+
+        function stopSpeaking() {
+            isSpeaking = false;
+            
+            // Stop any playing audio
+            const audios = document.getElementsByTagName('audio');
+            for (let audio of audios) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+            
+            // Also stop speech synthesis if active
+            if (speechSynthesis && speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+            }
+        }
 
         // Load conversation from localStorage on startup
         function loadConversation() {
@@ -395,7 +713,32 @@
             conversationHistory.forEach(msg => {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${msg.type}`;
-                messageDiv.innerHTML = `<div class="message-content">${escapeHtml(msg.text)}</div>`;
+                
+                // Add speaker button for bot messages
+                if (msg.type === 'bot') {
+                    const messageContent = document.createElement('div');
+                    messageContent.className = 'message-content';
+                    messageContent.textContent = msg.text;
+                    
+                    const speakerBtn = document.createElement('button');
+                    speakerBtn.className = 'speaker-btn';
+                    speakerBtn.title = 'Read aloud';
+                    speakerBtn.innerHTML = `
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    `;
+                    speakerBtn.onclick = function() {
+                        speakText(msg.text, messageDiv);
+                    };
+                    
+                    messageContent.appendChild(speakerBtn);
+                    messageDiv.appendChild(messageContent);
+                } else {
+                    messageDiv.innerHTML = `<div class="message-content">${escapeHtml(msg.text)}</div>`;
+                }
+                
                 messagesDiv.appendChild(messageDiv);
             });
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -453,7 +796,32 @@
 
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
-            messageDiv.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+            
+            // Add speaker button for bot messages
+            if (type === 'bot') {
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content';
+                messageContent.textContent = text;
+                
+                const speakerBtn = document.createElement('button');
+                speakerBtn.className = 'speaker-btn';
+                speakerBtn.title = 'Read aloud';
+                speakerBtn.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                `;
+                speakerBtn.onclick = function() {
+                    speakText(text, messageDiv);
+                };
+                
+                messageContent.appendChild(speakerBtn);
+                messageDiv.appendChild(messageContent);
+            } else {
+                messageDiv.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+            }
+            
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
@@ -581,6 +949,39 @@
         window.testConnection = testConnection;
         window.handleKeyPress = handleKeyPress;
         window.startNewChat = startNewChat;
+        window.toggleVoiceInput = toggleVoiceInput;
+        window.speakText = speakText;
+        window.stopSpeaking = stopSpeaking;
+
+        // Initialize speech recognition
+        initSpeechRecognition();
+
+        // Load voices for text-to-speech
+        let voicesLoaded = false;
+        
+        function loadVoices() {
+            const voices = speechSynthesis.getVoices();
+            if (voices.length > 0 && !voicesLoaded) {
+                voicesLoaded = true;
+                console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+                
+                // Log Arabic voices specifically
+                const arabicVoices = voices.filter(v => v.lang.includes('ar'));
+                console.log('Arabic voices found:', arabicVoices.length);
+                arabicVoices.forEach(v => console.log(`- ${v.name} (${v.lang})`));
+            }
+        }
+
+        // Try to load voices immediately
+        loadVoices();
+        
+        // Also listen for the voiceschanged event
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
+        }
+        
+        // Force load after a delay as backup
+        setTimeout(loadVoices, 1000);
 
         // Load saved conversation on startup
         loadConversation();
