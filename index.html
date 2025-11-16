@@ -398,7 +398,12 @@ src="https://code.responsivevoice.org/responsivevoice.js?key=L3k0PDBj"></script>
                 <h1>شات بوت السنهوري</h1>
                 <p>تكلم مع الدكاء الاصطناعي الدي يجيب بالاعتماد على كتب العلامة السنهوري</p>
             </div>
-            <div style="display: flex; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label for="modeSelect" style="font-size:12px; color:#d4af37; font-weight:bold;">Mode:</label>
+                <select id="modeSelect" style="padding:4px 8px; border-radius:6px; border:1px solid #d4af37; color:#16213e; background:#fff; font-size:12px;">
+                    <option value="civil" selected>Civil</option>
+                    <option value="penal">Penal</option>
+                </select>
                 <span class="status-badge" id="statusBadge">Ready</span>
                 <button class="new-chat-btn" onclick="startNewChat()">⚖️ New Chat</button>
                 <button class="test-btn" onclick="testConnection()">Test API</button>
@@ -440,6 +445,14 @@ src="https://code.responsivevoice.org/responsivevoice.js?key=L3k0PDBj"></script>
     </div>
 
     <script type="module">
+                // Called when the user switches between civil/penal
+                function onModeChange() {
+                    // Reset client so it will reconnect with the new endpoint
+                    client = null;
+                    updateStatus('ready');
+                    // Optionally, show a message or visual indicator
+                    addMessage(`Switched to ${selectedMode === 'penal' ? 'Penal' : 'Civil'} mode.`, 'bot');
+                }
         import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@1.6.0/dist/index.min.js";
 
         let isLoading = false;
@@ -450,6 +463,17 @@ src="https://code.responsivevoice.org/responsivevoice.js?key=L3k0PDBj"></script>
         let speechSynthesis = window.speechSynthesis;
         let currentUtterance = null;
         let isSpeaking = false;
+        // Track selected mode: 'civil' (default) or 'penal'
+        let selectedMode = 'civil';
+
+        // Listen for mode changes
+        const modeSelect = document.getElementById('modeSelect');
+        if (modeSelect) {
+            modeSelect.addEventListener('change', (e) => {
+                selectedMode = e.target.value;
+                onModeChange();
+            });
+        }
 
         // Initialize Speech Recognition
         function initSpeechRecognition() {
@@ -765,9 +789,13 @@ src="https://code.responsivevoice.org/responsivevoice.js?key=L3k0PDBj"></script>
             try {
                 if (!client) {
                     updateStatus('connecting');
-                    client = await Client.connect("ramdane/sanhouri");
+                    let endpoint = "ramdane/sanhouri";
+                    if (selectedMode === 'penal') {
+                        endpoint = "ramdane/penalsanhouri";
+                    }
+                    client = await Client.connect(endpoint);
                     updateStatus('ready');
-                    console.log('Gradio client connected successfully');
+                    console.log('Gradio client connected successfully to', endpoint);
                 }
                 return client;
             } catch (error) {
