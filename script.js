@@ -93,6 +93,75 @@ function stopListening() {
     voiceBtn.classList.remove('listening');
 }
 
+// Copy to clipboard function
+async function copyToClipboard(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            textArea.remove();
+        }
+        return true;
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+        return false;
+    }
+}
+
+// Show temporary notification
+function showCopyNotification(messageElement) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4caf50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        z-index: 1000;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: slideInRight 0.3s ease;
+    `;
+    notification.textContent = 'تم نسخ النص!';
+    
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 2 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => {
+            notification.remove();
+            style.remove();
+        }, 300);
+    }, 2000);
+}
+
 // Text-to-Speech Functions using ElevenLabs-style API
 // Text-to-Speech Functions with improved fallback
 async function speakText(text, messageElement) {
@@ -301,40 +370,57 @@ function displayConversation() {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${msg.type}`;
         
-        // Add speaker button for bot messages
+        // Add speaker and copy buttons for bot messages
         if (msg.type === 'bot') {
             const messageContent = document.createElement('div');
             messageContent.className = 'message-content';
             messageContent.textContent = msg.text;
             
-        const speakerBtn = document.createElement('button');
-        speakerBtn.className = 'speaker-btn';
-        speakerBtn.title = 'Read aloud';
-        speakerBtn.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            </svg>
-        `;
-        speakerBtn.onclick = function() {
-            speakText(msg.text, messageDiv);
-        };
-        
-        const stopBtn = document.createElement('button');
-        stopBtn.className = 'stop-btn';
-        stopBtn.title = 'Stop speaking';
-        stopBtn.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="6" y="6" width="12" height="12"></rect>
-            </svg>
-        `;
-        stopBtn.onclick = function() {
-            stopSpeaking();
-            updateSpeakerIcon(messageDiv, false);
-        };
-        
-        messageContent.appendChild(speakerBtn);
-        messageContent.appendChild(stopBtn);
+            const speakerBtn = document.createElement('button');
+            speakerBtn.className = 'speaker-btn';
+            speakerBtn.title = 'Read aloud';
+            speakerBtn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+            `;
+            speakerBtn.onclick = function() {
+                speakText(msg.text, messageDiv);
+            };
+            
+            const stopBtn = document.createElement('button');
+            stopBtn.className = 'stop-btn';
+            stopBtn.title = 'Stop speaking';
+            stopBtn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="6" width="12" height="12"></rect>
+                </svg>
+            `;
+            stopBtn.onclick = function() {
+                stopSpeaking();
+                updateSpeakerIcon(messageDiv, false);
+            };
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn';
+            copyBtn.title = 'Copy to clipboard';
+            copyBtn.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            `;
+            copyBtn.onclick = async function() {
+                const success = await copyToClipboard(msg.text);
+                if (success) {
+                    showCopyNotification(messageDiv);
+                }
+            };
+            
+            messageContent.appendChild(speakerBtn);
+            messageContent.appendChild(stopBtn);
+            messageContent.appendChild(copyBtn);
             messageDiv.appendChild(messageContent);
         } else {
             messageDiv.innerHTML = `<div class="message-content">${escapeHtml(msg.text)}</div>`;
@@ -402,7 +488,7 @@ function addMessage(text, type = 'bot') {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
     
-    // Add speaker button for bot messages
+    // Add speaker and copy buttons for bot messages
     if (type === 'bot') {
         const messageContent = document.createElement('div');
         messageContent.className = 'message-content';
@@ -434,8 +520,25 @@ function addMessage(text, type = 'bot') {
             updateSpeakerIcon(messageDiv, false);
         };
         
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.title = 'Copy to clipboard';
+        copyBtn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+        `;
+        copyBtn.onclick = async function() {
+            const success = await copyToClipboard(text);
+            if (success) {
+                showCopyNotification(messageDiv);
+            }
+        };
+        
         messageContent.appendChild(speakerBtn);
         messageContent.appendChild(stopBtn);
+        messageContent.appendChild(copyBtn);
         messageDiv.appendChild(messageContent);
     } else {
         messageDiv.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;

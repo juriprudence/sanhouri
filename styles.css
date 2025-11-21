@@ -175,9 +175,10 @@ body {
     40%           { transform: scale(1); }
 }
 
-/* --------------  SPEAKER & STOP ICONS INSIDE BUBBLE  -------------- */
+/* --------------  SPEAKER, STOP & COPY ICONS INSIDE BUBBLE  -------------- */
 .speaker-btn,
-.stop-btn {
+.stop-btn,
+.copy-btn {
     background: transparent;
     border: none;
     color: #0f3460;
@@ -190,10 +191,13 @@ body {
     justify-content: center;
 }
 .speaker-btn:hover,
-.stop-btn:hover          { color: #d4af37; transform: scale(1.1); }
-.speaker-btn.speaking    { color: #4caf50; animation: pulse 1.5s infinite; }
-.stop-btn                { color: #c33; }
-.stop-btn:hover          { color: #e74c3c; transform: scale(1.1); }
+.stop-btn:hover,
+.copy-btn:hover { color: #d4af37; transform: scale(1.1); }
+.speaker-btn.speaking { color: #4caf50; animation: pulse 1.5s infinite; }
+.stop-btn { color: #c33; }
+.stop-btn:hover { color: #e74c3c; transform: scale(1.1); }
+.copy-btn { color: #0f3460; }
+.copy-btn:hover { color: #2196f3; transform: scale(1.1); }
 
 @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -212,4 +216,3 @@ body {
 /* --------------  SAFARI 100 vh FIX  -------------- */
 @supports (-webkit-touch-callout: none) {
     .chat-container { height: -webkit-fill-available; }
-}
